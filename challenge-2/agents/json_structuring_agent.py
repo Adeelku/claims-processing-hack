@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-JSON Structuring Agent - Converts OCR text into structured JSON format.
-Uses GPT-4.1-mini to parse OCR results and create structured claim data.
+OCR Text Extraction Agent - Extracts and structures text from JPEG images.
+Uses GPT-4o-mini to parse OCR results and create structured text data.
+Focuses solely on text extraction - does not analyze visual content like car damage.
 
 Usage:
     python json_structuring_agent.py <ocr_result.json or ocr_text.txt>
     
 Example with OCR JSON output:
-    python json_structuring_agent.py ../ocr_results/crash1_front_ocr_result.json
+    python json_structuring_agent.py ../ocr_results/document_ocr_result.json
     
 """
 import os
@@ -35,122 +36,64 @@ project_endpoint = os.environ.get("AI_FOUNDRY_PROJECT_ENDPOINT")
 model_deployment_name = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini")
 
 
-def get_agent_instructions(vehicle_side: str = None) -> str:
+def get_agent_instructions() -> str:
     """
-    Generate agent instructions based on detected vehicle side.
+    Generate agent instructions for OCR text extraction from JPEG pictures.
     
-    Args:
-        vehicle_side: 'front', 'back', or None for general instructions
-        
     Returns:
-        Agent instruction string
+        Agent instruction string for pure OCR extraction
     """
-    # Build side-specific requirements
-    if vehicle_side == "front":
-        side_specific_fields = """
-  "vehicle_side": "front",
-  "front_specific": {
-    "windshield_damage": "intact | cracked | shattered | null",
-    "front_bumper_damage": "none | scratched | dented | detached | null",
-    "headlights_damage": "intact | cracked | broken | missing | null",
-    "hood_damage": "none | scratched | dented | buckled | null",
-    "grille_damage": "intact | damaged | missing | null",
-    "license_plate_visible": true or false,
-    "front_damage_severity": "none | minor | moderate | severe"
-  },"""
-        side_requirements = """\n**FRONT PHOTO REQUIREMENTS**:
-- MUST extract windshield condition (intact/cracked/shattered)
-- MUST assess front bumper damage level
-- MUST check headlight condition (both left and right if visible)
-- MUST evaluate hood damage
-- MUST note if license plate is visible and readable
-- MUST provide overall front damage severity rating"""
-    elif vehicle_side == "back":
-        side_specific_fields = """
-  "vehicle_side": "back",
-  "back_specific": {
-    "rear_windshield_damage": "intact | cracked | shattered | null",
-    "rear_bumper_damage": "none | scratched | dented | detached | null",
-    "taillights_damage": "intact | cracked | broken | missing | null",
-    "trunk_damage": "none | scratched | dented | buckled | null",
-    "exhaust_damage": "intact | damaged | detached | null",
-    "license_plate_visible": true or false,
-    "rear_damage_severity": "none | minor | moderate | severe"
-  },"""
-        side_requirements = """\n**BACK PHOTO REQUIREMENTS**:
-- MUST extract rear windshield condition (intact/cracked/shattered)
-- MUST assess rear bumper damage level
-- MUST check taillight condition (both left and right if visible)
-- MUST evaluate trunk/hatchback damage
-- MUST note if rear license plate is visible and readable
-- MUST provide overall rear damage severity rating"""
-    else:
-        side_specific_fields = """
-  "vehicle_side": "unspecified","""
-        side_requirements = """\n**GENERAL PHOTO**:
-- Extract any visible damage information
-- Note which parts of vehicle are visible in the image"""
-    
-    return f"""You are an expert document structuring assistant specialized in converting OCR text from insurance claims documents into structured JSON format.
+    return """You are an expert OCR text extraction assistant specialized in extracting and structuring text content from JPEG images.
 
 **Your Task**:
-Extract and structure information from OCR text into a standardized JSON format for insurance claims processing.
+Extract all visible text from the provided JPEG image and structure it into a clean, organized JSON format. Focus solely on text extraction - do not analyze or describe any visual elements, objects, or non-text content in the image.
 
 **JSON Output Structure**:
-{{{side_specific_fields}
-  "document_type": "claim_form | damage_photo | policy_document | statement",
-  "extracted_data": {{
-    "policy_holder": {{
-      "name": "extracted name or null",
-      "policy_number": "extracted policy number or null"
-    }},
-    "incident": {{
-      "date": "YYYY-MM-DD or null",
-      "type": "vehicle_collision | theft | vandalism | weather | fire | other",
-      "description": "brief description or null",
-      "location": "location if mentioned or null"
-    }},
-    "damages": {{
-      "description": "damage description",
-      "estimated_amount": numeric_amount or null,
-      "currency": "USD or other",
-      "items": [
-        {{
-          "part": "part name",
-          "cost": numeric_cost or null
-        }}
-      ]
-    }},
-    "vehicle_info": {{
-      "make": "manufacturer or null",
-      "model": "model or null",
-      "year": numeric_year or null,
-      "license_plate": "plate number or null",
-      "vin": "VIN if present or null"
-    }},
-    "contact_info": {{
-      "phone": "phone number or null",
-      "email": "email or null",
-      "address": "address or null"
-    }},
-    "additional_details": "any other relevant information"
-  }},
+{
+  "document_type": "form | letter | receipt | invoice | certificate | report | handwritten | mixed | other",
+  "extracted_text": {
+    "raw_text": "Complete extracted text preserving original layout where possible",
+    "text_blocks": [
+      {
+        "block_id": 1,
+        "content": "Text content of this block",
+        "text_type": "printed | handwritten | mixed"
+      }
+    ],
+    "structured_fields": {
+      "titles": ["Any document titles or headers"],
+      "dates": ["Extracted dates in original format"],
+      "names": ["Person or organization names found"],
+      "addresses": ["Any addresses found"],
+      "phone_numbers": ["Phone numbers found"],
+      "email_addresses": ["Email addresses found"],
+      "reference_numbers": ["Document numbers, IDs, or reference codes"],
+      "amounts": ["Monetary amounts or numeric values with context"]
+    }
+  },
+  "text_quality": {
+    "overall_legibility": "high | medium | low",
+    "issues": ["List any text that was unclear or partially readable"]
+  },
   "confidence": "high | medium | low",
-  "extraction_notes": "notes about the extraction quality or missing information"
-}}{side_requirements}
+  "extraction_notes": "Notes about the extraction quality or any ambiguities"
+}
 
 **Processing Rules**:
-1. Extract all available information from the OCR text
-2. Use null for fields where information is not present
-3. Preserve numeric values as numbers, not strings
-4. Standardize dates to YYYY-MM-DD format when possible
-5. Classify document type based on content
-6. Set confidence level based on text clarity and completeness
-7. Include extraction notes about any ambiguities or issues
-8. For damage photos with minimal text, focus on visible damage descriptions
+1. Extract ALL visible text from the image - do not skip any text content
+2. Preserve the original text exactly as it appears (spelling, formatting, punctuation)
+3. Organize text blocks in reading order (top to bottom, left to right)
+4. Identify and categorize structured fields (dates, names, numbers, etc.)
+5. Note any text that is unclear, partially visible, or difficult to read
+6. Use null for structured fields where no relevant text is found
+7. Set confidence level based on text clarity and extraction completeness
+8. Focus ONLY on text - ignore any images, graphics, logos, or visual elements
 9. Return ONLY valid JSON, no additional commentary
 
-**Important**: Your entire response must be valid JSON that can be parsed. Do not include any text before or after the JSON object."""
+**Important**: 
+- Your entire response must be valid JSON that can be parsed
+- Do not include any text before or after the JSON object
+- Do not describe or analyze any pictures, photos, or visual content - extract text only"""
 
 
 def structure_ocr_to_json(ocr_text: str, source_file: str = None, project_client=None, agent=None) -> dict:
@@ -164,19 +107,10 @@ def structure_ocr_to_json(ocr_text: str, source_file: str = None, project_client
         agent: Optional existing agent to reuse
         
     Returns:
-        Structured JSON dictionary containing claim information
+        Structured JSON dictionary containing extracted text information
     """
     try:
-        # Detect vehicle side from filename
-        vehicle_side = None
-        if source_file:
-            filename_lower = os.path.basename(source_file).lower()
-            if "front" in filename_lower:
-                vehicle_side = "front"
-            elif "back" in filename_lower:
-                vehicle_side = "back"
-        
-        logger.info(f"Detected vehicle side: {vehicle_side or 'unspecified'}")
+        logger.info(f"Processing OCR text from: {source_file or 'unknown source'}")
         
         # Create client if not provided
         should_close_client = False
@@ -188,117 +122,12 @@ def structure_ocr_to_json(ocr_text: str, source_file: str = None, project_client
             )
             should_close_client = True
         
-        # Build side-specific requirements
-        if vehicle_side == "front":
-            side_specific_fields = """
-  "vehicle_side": "front",
-  "front_specific": {
-    "windshield_damage": "intact | cracked | shattered | null",
-    "front_bumper_damage": "none | scratched | dented | detached | null",
-    "headlights_damage": "intact | cracked | broken | missing | null",
-    "hood_damage": "none | scratched | dented | buckled | null",
-    "grille_damage": "intact | damaged | missing | null",
-    "license_plate_visible": true or false,
-    "front_damage_severity": "none | minor | moderate | severe"
-  },"""
-            side_requirements = """\n**FRONT PHOTO REQUIREMENTS**:
-- MUST extract windshield condition (intact/cracked/shattered)
-- MUST assess front bumper damage level
-- MUST check headlight condition (both left and right if visible)
-- MUST evaluate hood damage
-- MUST note if license plate is visible and readable
-- MUST provide overall front damage severity rating"""
-        elif vehicle_side == "back":
-            side_specific_fields = """
-  "vehicle_side": "back",
-  "back_specific": {
-    "rear_windshield_damage": "intact | cracked | shattered | null",
-    "rear_bumper_damage": "none | scratched | dented | detached | null",
-    "taillights_damage": "intact | cracked | broken | missing | null",
-    "trunk_damage": "none | scratched | dented | buckled | null",
-    "exhaust_damage": "intact | damaged | detached | null",
-    "license_plate_visible": true or false,
-    "rear_damage_severity": "none | minor | moderate | severe"
-  },"""
-            side_requirements = """\n**BACK PHOTO REQUIREMENTS**:
-- MUST extract rear windshield condition (intact/cracked/shattered)
-- MUST assess rear bumper damage level
-- MUST check taillight condition (both left and right if visible)
-- MUST evaluate trunk/hatchback damage
-- MUST note if rear license plate is visible and readable
-- MUST provide overall rear damage severity rating"""
-        else:
-            side_specific_fields = """
-  "vehicle_side": "unspecified","""
-            side_requirements = """\n**GENERAL PHOTO**:
-- Extract any visible damage information
-- Note which parts of vehicle are visible in the image"""
-        
-        # Agent instructions for structuring OCR output
-        agent_instructions = f"""You are an expert document structuring assistant specialized in converting OCR text from insurance claims documents into structured JSON format.
-
-**Your Task**:
-Extract and structure information from OCR text into a standardized JSON format for insurance claims processing.
-
-**JSON Output Structure**:
-{{
-  "document_type": "claim_form | damage_photo | policy_document | statement",{side_specific_fields}
-  "extracted_data": {{
-    "policy_holder": {{
-      "name": "extracted name or null",
-      "policy_number": "extracted policy number or null"
-    }},
-    "incident": {{
-      "date": "YYYY-MM-DD or null",
-      "type": "vehicle_collision | theft | vandalism | weather | fire | other",
-      "description": "brief description or null",
-      "location": "location if mentioned or null"
-    }},
-    "damages": {{
-      "description": "damage description",
-      "estimated_amount": numeric_amount or null,
-      "currency": "USD or other",
-      "items": [
-        {{
-          "part": "part name",
-          "cost": numeric_cost or null
-        }}
-      ]
-    }},
-    "vehicle_info": {{
-      "make": "manufacturer or null",
-      "model": "model or null",
-      "year": numeric_year or null,
-      "license_plate": "plate number or null",
-      "vin": "VIN if present or null"
-    }},
-    "contact_info": {{
-      "phone": "phone number or null",
-      "email": "email or null",
-      "address": "address or null"
-    }},
-    "additional_details": "any other relevant information"
-  }},
-  "confidence": "high | medium | low",
-  "extraction_notes": "notes about the extraction quality or missing information"
-}}{side_requirements}
-
-**Processing Rules**:
-1. Extract all available information from the OCR text
-2. Use null for fields where information is not present
-3. Preserve numeric values as numbers, not strings
-4. Standardize dates to YYYY-MM-DD format when possible
-5. Classify document type based on content
-6. Set confidence level based on text clarity and completeness
-7. Include extraction notes about any ambiguities or issues
-8. For damage photos with minimal text, focus on visible damage descriptions
-9. Return ONLY valid JSON, no additional commentary
-
-**Important**: Your entire response must be valid JSON that can be parsed. Do not include any text before or after the JSON object."""
+        # Get agent instructions for pure OCR text extraction
+        agent_instructions = get_agent_instructions()
         
         # Create the agent
         agent = project_client.agents.create_version(
-            agent_name="JSONStructuringAgent",
+            agent_name="OCRTextExtractionAgent",
             definition=PromptAgentDefinition(
                 model=model_deployment_name,
                 instructions=agent_instructions,
@@ -306,22 +135,21 @@ Extract and structure information from OCR text into a standardized JSON format 
             ),
         )
         
-        logger.info(f"✅ Created JSON Structuring Agent: {agent.name} (version {agent.version})")
+        logger.info(f"✅ Created OCR Text Extraction Agent: {agent.name} (version {agent.version})")
         
         # Get OpenAI client for responses
         openai_client = project_client.get_openai_client()
         
         # Create user query with OCR text
-        side_context = f" This is a {vehicle_side.upper()} view of the vehicle." if vehicle_side else ""
-        user_query = f"""Please structure the following OCR text into the standardized JSON format.{side_context}
+        user_query = f"""Please extract and structure all text from the following OCR output into the standardized JSON format.
 
 ---OCR TEXT START---
 {ocr_text}
 ---OCR TEXT END---
 
-Return only the structured JSON object."""
+Return only the structured JSON object with all extracted text."""
         
-        logger.info("Sending OCR text to structuring agent...")
+        logger.info("Sending OCR text to extraction agent...")
         
         # Get response from agent
         response = openai_client.responses.create(
@@ -346,13 +174,12 @@ Return only the structured JSON object."""
         # Add metadata
         structured_data["metadata"] = {
             "source_file": source_file or "unknown",
-            "detected_vehicle_side": vehicle_side,
             "processing_timestamp": datetime.now().isoformat(),
             "agent_model": model_deployment_name,
             "original_text_length": len(ocr_text)
         }
         
-        logger.info("✓ Successfully structured OCR text into JSON")
+        logger.info("✓ Successfully extracted and structured OCR text into JSON")
         return structured_data
         
     except json.JSONDecodeError as e:
@@ -452,16 +279,7 @@ def main():
             print(f"❌ Error: File not found: {input_file}")
             return
         
-        # Detect vehicle side from filename
-        vehicle_side = None
-        filename_lower = os.path.basename(input_file).lower()
-        if "front" in filename_lower:
-            vehicle_side = "front"
-        elif "back" in filename_lower:
-            vehicle_side = "back"
-        
-        print(f"📄 Processing file: {input_file}")
-        print(f"   Detected vehicle side: {vehicle_side or 'unspecified'}\n")
+        print(f"📄 Processing file: {input_file}\n")
         
         # Create AI Project Client
         project_client = AIProjectClient(
@@ -470,12 +288,12 @@ def main():
         )
         
         with project_client:
-            # Generate agent instructions based on vehicle side
-            agent_instructions = get_agent_instructions(vehicle_side)
+            # Generate agent instructions for OCR text extraction
+            agent_instructions = get_agent_instructions()
             
             # Create the agent
             agent = project_client.agents.create_version(
-                agent_name="JSONStructuringAgent",
+                agent_name="OCRTextExtractionAgent",
                 definition=PromptAgentDefinition(
                     model=model_deployment_name,
                     instructions=agent_instructions,
@@ -483,7 +301,7 @@ def main():
                 ),
             )
             
-            print(f"✅ Created JSON Structuring Agent: {agent.name} (version {agent.version})")
+            print(f"✅ Created OCR Text Extraction Agent: {agent.name} (version {agent.version})")
             print(f"   Agent visible in Foundry portal\n")
             
             # Read input file
@@ -520,16 +338,15 @@ def main():
             openai_client = project_client.get_openai_client()
             
             # Create user query
-            side_context = f" This is a {vehicle_side.upper()} view of the vehicle." if vehicle_side else ""
-            user_query = f"""Please structure the following OCR text into the standardized JSON format.{side_context}
+            user_query = f"""Please extract and structure all text from the following OCR output into the standardized JSON format.
 
 ---OCR TEXT START---
 {ocr_text}
 ---OCR TEXT END---
 
-Return only the structured JSON object."""
+Return only the structured JSON object with all extracted text."""
             
-            print("🤖 Sending to agent for structuring...")
+            print("🤖 Sending to agent for text extraction...")
             
             # Get response from agent
             response = openai_client.responses.create(
@@ -553,7 +370,6 @@ Return only the structured JSON object."""
                 # Add metadata
                 result["metadata"] = {
                     "source_file": source_file,
-                    "detected_vehicle_side": vehicle_side,
                     "processing_timestamp": datetime.now().isoformat(),
                     "agent_model": model_deployment_name,
                     "original_text_length": len(ocr_text)
